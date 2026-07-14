@@ -27,8 +27,8 @@ jobs:
         env:
           TAG_NAME: ${{ github.ref_name }}
         run: |
-          package_version="$(node -p \"require('./package.json').version\")"
-          manifest_version="$(node -p \"require('./public/manifest.json').version\")"
+          package_version="$(node -p "require('./package.json').version")"
+          manifest_version="$(node -p "require('./public/manifest.json').version")"
           expected_tag="v${package_version}"
 
           test "${TAG_NAME}" = "${expected_tag}"
