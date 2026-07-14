@@ -1,0 +1,62 @@
+name: Release extension
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and publish
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Verify the release version
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          package_version="$(node -p \"require('./package.json').version\")"
+          manifest_version="$(node -p \"require('./public/manifest.json').version\")"
+          expected_tag="v${package_version}"
+
+          test "${TAG_NAME}" = "${expected_tag}"
+          test "${package_version}" = "${manifest_version}"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check, test, and build
+        run: |
+          npm run lint
+          npm run typecheck
+          npm test
+          npm run build
+          npm run validate:dist
+
+      - name: Create release archive
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          cd dist
+          zip -r "../memos-chrome-extension-${VERSION}.zip" .
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          gh release create "${TAG_NAME}" "memos-chrome-extension-${TAG_NAME}.zip" \
+            --title "${TAG_NAME}" \
+            --generate-notes

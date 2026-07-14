@@ -1,52 +1,56 @@
-# Memos Chrome Extension
+# Memos Clipper
 
-一个基于 Chrome Manifest V3 的浏览器扩展，用于快速创建 Memos，以及将当前网页剪藏到自己的 Memos 实例。
+[简体中文](README_CN.md)
 
-## 本地开发
+Memos Clipper is a Chrome extension for saving a thought or the page you are reading directly to your own Memos instance.
 
-要求 Node.js 20.19 或更高版本。
+## What it does
 
-```bash
-npm install
-npm run dev
-```
+- Create a new Memo from the extension popup.
+- Clip the current web page: its title and a cleaned URL are added to the editor for review before saving.
+- Continue editing the most recently created Memo, or start a new one at any time.
+- Restore unsent drafts when you reopen the popup.
+- Append one optional default tag without duplicating it.
+- Use the interface in English, Simplified Chinese, or follow Chrome's language.
 
-常用命令：
+## Install
 
-```bash
-npm run typecheck
-npm run lint
-npm test
-npm run build
-npm run validate:dist
-```
+1. Download and unzip a release package, or build the extension from source.
+2. In Chrome, open `chrome://extensions`.
+3. Enable **Developer mode**.
+4. Choose **Load unpacked**, then select the unzipped extension folder (or this project's `dist/` folder after building).
+5. Pin **Memos Clipper** from Chrome's Extensions menu if you want it always visible in the toolbar.
 
-`npm run build` 会生成 `dist/`。在 Chrome 的扩展程序页面打开“开发者模式”，选择“加载已解压的扩展程序”，然后选择该目录。
+## Set up your Memos instance
 
-## 入口与构建产物
+1. Open Memos Clipper and select **Settings**.
+2. Enter your Memos instance URL, for example `https://memos.example.com`. Do not add `/api/v1`.
+3. Create an Access Token in your Memos account and paste it into **Access Token**.
+4. Optionally set a default tag such as `#inbox`.
+5. Select **Save settings** and approve Chrome's request to access that Memos instance.
 
-- `src/popup.ts`：扩展弹窗入口，对应 `popup.html`
-- `src/options.ts`：设置页入口，对应 `options.html`
-- `src/background.ts`：Manifest V3 后台 Service Worker
-- `public/manifest.json`：扩展清单，构建时复制到 `dist/`
-- `dist/assets/background.js`：固定名称的后台脚本产物
+Your instance URL, token, preferences, drafts, and the reference to the most recently created Memo are saved only in Chrome's local extension storage. The extension asks for access only to the Memos origin you configure.
 
-弹窗和设置页由 Vite 生成带内容哈希的脚本文件。测试使用 Vitest 和 jsdom，代码检查使用 ESLint。
-`validate:dist` 会检查 Manifest 的后台脚本、页面入口、各尺寸 PNG 图标，以及中英文原生本地化消息是否都存在。
+## Save a Memo or clip a page
 
-## 权限说明
+Open the extension from the toolbar, write your Memo, then select **Create memo**. After it is created, the same editor updates that Memo; choose **New memo** when you want a separate one. You can also press <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>Enter</kbd> to save.
 
-扩展默认只申请：
+To clip the current page, select **Clip this page**. Memos Clipper adds the page title and URL to the editor and removes common tracking parameters from the URL. Review or edit the content, then save it. Chrome internal pages and other non-web pages cannot be clipped.
 
-- `storage`：保存实例地址、访问令牌、默认标签、默认剪藏设置、语言偏好和最近创建的 Memo
-- `activeTab`：在用户主动触发剪藏时读取当前页面标题和地址
+In Settings, you can enable **Clip the current page when opening the extension**. This fills a fresh Memo automatically and never overwrites an existing draft.
 
-访问自托管 Memos 实例所需的 HTTP/HTTPS 域名权限声明为可选权限，应在用户保存实例配置时按需请求。访问令牌保存在浏览器扩展的本地存储中，不应写入日志或展示在错误详情里。
+## Privacy and permissions
 
-剪藏通过弹窗中的“剪藏此页”按钮触发。设置页可开启“默认剪藏当前网页”：每次打开扩展时，会在新的空白 Memo 中自动填入清理追踪参数后的当前页面链接；已有草稿不会被覆盖。该选项默认关闭。
+- **Storage** keeps your configuration and drafts in `chrome.storage.local`.
+- **Active tab** is used only after you choose to clip the current page, to read its title and URL.
+- **Host access** is requested only for the Memos instance URL you save, so the extension can call its API.
 
-## 语言
+Do not share your Access Token. It is not displayed in error details or written to application logs.
 
-扩展只提供简体中文和 English。首次使用及选择“跟随系统”时，会按 Chrome 的界面语言自动选择：`zh*` 使用简体中文，其余语言使用 English。设置页可随时选择“跟随系统”、中文或 English；语言偏好会立即保存，不需要先填写 Memos 实例或 Access Token。
+## Need help?
 
-扩展名称使用 Chrome 原生本地化，因此它跟随 Chrome 的界面语言；弹窗、设置页和工具栏提示则遵循扩展内的语言选择。
+First, confirm that the instance URL is reachable in Chrome, the token is valid, and Chrome has been granted access to the configured instance. You can reopen **Settings** from the popup to update either value.
+
+## Development
+
+For local development, release workflow, build output, and implementation details, see [DEVELOPMENT.md](DEVELOPMENT.md).
