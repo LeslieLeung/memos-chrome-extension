@@ -1,0 +1,11 @@
+{
+  "extensionName": {
+    "message": "Memos 剪藏"
+  },
+  "extensionDescription": {
+    "message": "快速创建 Memos，并将当前网页剪藏到自己的 Memos 实例。"
+  },
+  "actionTitle": {
+    "message": "保存到 Memos"
+  }
+}

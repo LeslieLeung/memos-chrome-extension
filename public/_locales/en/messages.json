@@ -1,0 +1,11 @@
+{
+  "extensionName": {
+    "message": "Memos Clipper"
+  },
+  "extensionDescription": {
+    "message": "Quickly create Memos and clip the current webpage to your own Memos instance."
+  },
+  "actionTitle": {
+    "message": "Save to Memos"
+  }
+}

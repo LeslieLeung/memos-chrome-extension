@@ -1,0 +1,107 @@
+import { normalizeDefaultTag } from "./config";
+import type { ClipData } from "./types";
+
+const TRACKING_PARAMETERS = new Set([
+  "_ga",
+  "_gl",
+  "_hsenc",
+  "_hsmi",
+  "dclid",
+  "fbclid",
+  "gclid",
+  "gbraid",
+  "hsctatracking",
+  "igshid",
+  "mc_cid",
+  "mc_eid",
+  "mkt_tok",
+  "msclkid",
+  "oly_anon_id",
+  "oly_enc_id",
+  "rb_clickid",
+  "ref_src",
+  "s_cid",
+  "si",
+  "twclid",
+  "vero_conv",
+  "vero_id",
+  "wbraid",
+  "wickedid",
+  "yclid",
+]);
+
+function isTrackingParameter(name: string): boolean {
+  const normalized = name.toLowerCase();
+  return normalized.startsWith("utm_") || TRACKING_PARAMETERS.has(normalized);
+}
+
+/**
+ * Removes known tracking query parameters without touching business parameters,
+ * their order, or the page fragment. Invalid and non-web URLs are returned intact.
+ */
+export function cleanTrackingUrl(input: string): string {
+  const value = input.trim();
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return value;
+  }
+
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    return value;
+  }
+
+  // Browser tab URLs normally have no user info, but never put it into a memo.
+  url.username = "";
+  url.password = "";
+
+  const keysToDelete = new Set<string>();
+  for (const key of url.searchParams.keys()) {
+    if (isTrackingParameter(key)) {
+      keysToDelete.add(key);
+    }
+  }
+  for (const key of keysToDelete) {
+    url.searchParams.delete(key);
+  }
+
+  return url.toString();
+}
+
+export function buildClipContent({ url }: ClipData): string {
+  const cleanedUrl = cleanTrackingUrl(url);
+
+  let parsed: URL;
+  try {
+    parsed = new URL(cleanedUrl);
+  } catch {
+    throw new TypeError("The current page does not have a valid web URL.");
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new TypeError("Only http and https pages can be clipped.");
+  }
+
+  return cleanedUrl;
+}
+
+export function withDefaultTag(content: string, defaultTag: string): string {
+  const tag = normalizeDefaultTag(defaultTag);
+  if (!tag) {
+    return content;
+  }
+
+  const escapedTag = tag.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const tagToken = new RegExp(
+    `(^|[\\s([{"'])${escapedTag}(?=$|[\\s.,!?;:\uFF0C\u3002\uFF01\uFF1F\uFF1B\uFF1A)\\]}"'])`,
+    "u",
+  );
+  if (tagToken.test(content)) {
+    return content;
+  }
+
+  const withoutTrailingWhitespace = content.trimEnd();
+  return withoutTrailingWhitespace
+    ? `${withoutTrailingWhitespace}\n\n${tag}`
+    : tag;
+}
