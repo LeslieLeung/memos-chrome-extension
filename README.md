@@ -7,7 +7,8 @@ Memos Clipper is a Chrome extension for saving a thought or the page you are rea
 ## What it does
 
 - Create a new Memo from the extension popup.
-- Clip the current web page: its title and a cleaned URL are added to the editor for review before saving.
+- Clip the current web page: its cleaned URL is added to the editor for review before saving.
+- Check for an existing Memo with the same link and ask before saving a duplicate.
 - Continue editing the most recently created Memo, or start a new one at any time.
 - Restore unsent drafts when you reopen the popup.
 - Append one optional default tag without duplicating it.
@@ -35,14 +36,14 @@ Your instance URL, token, preferences, drafts, and the reference to the most rec
 
 Open the extension from the toolbar, write your Memo, then select **Create memo**. After it is created, the same editor updates that Memo; choose **New memo** when you want a separate one. You can also press <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>Enter</kbd> to save.
 
-To clip the current page, select **Clip this page**. Memos Clipper adds the page title and URL to the editor and removes common tracking parameters from the URL. Review or edit the content, then save it. Chrome internal pages and other non-web pages cannot be clipped.
+To clip the current page, select **Clip this page**. Memos Clipper adds the URL to the editor and removes common tracking parameters. When you save content containing a link, it searches your existing Memos first and asks whether to continue if the same link is already present. Chrome internal pages and other non-web pages cannot be clipped.
 
 In Settings, you can enable **Clip the current page when opening the extension**. This fills a fresh Memo automatically and never overwrites an existing draft.
 
 ## Privacy and permissions
 
 - **Storage** keeps your configuration and drafts in `chrome.storage.local`.
-- **Active tab** is used only after you choose to clip the current page, to read its title and URL.
+- **Active tab** is used only after you choose to clip the current page, to read its URL.
 - **Host access** is requested only for the Memos instance URL you save, so the extension can call its API.
 
 Do not share your Access Token. It is not displayed in error details or written to application logs.

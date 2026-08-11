@@ -75,6 +75,50 @@ describe("MemosClient", () => {
     );
   });
 
+  it("lists every memo page whose content contains a link", async () => {
+    const firstPage = Response.json({
+      memos: [
+        {
+          name: "memos/first",
+          content: "https://example.com/read?id=42",
+          visibility: "PRIVATE",
+        },
+      ],
+      nextPageToken: "next page",
+    });
+    const secondPage = Response.json({
+      memos: [
+        {
+          name: "memos/second",
+          content: "Saved https://example.com/read?id=42",
+          visibility: "PRIVATE",
+        },
+      ],
+    });
+    const fetchMock = vi
+      .fn<FetchLike>()
+      .mockResolvedValueOnce(firstPage)
+      .mockResolvedValueOnce(secondPage);
+    const client = new MemosClient(
+      { instanceUrl: "https://memos.example.com", apiKey: "token" },
+      fetchMock,
+    );
+
+    await expect(
+      client.listMemosContaining("https://example.com/read?id=42"),
+    ).resolves.toHaveLength(2);
+
+    const firstUrl = new URL(String(fetchMock.mock.calls[0]?.[0]));
+    expect(firstUrl.pathname).toBe("/api/v1/memos");
+    expect(firstUrl.searchParams.get("pageSize")).toBe("1000");
+    expect(firstUrl.searchParams.get("filter")).toBe(
+      'content.contains("https://example.com/read?id=42")',
+    );
+
+    const secondUrl = new URL(String(fetchMock.mock.calls[1]?.[0]));
+    expect(secondUrl.searchParams.get("pageToken")).toBe("next page");
+  });
+
   it("requires a usable API key and memo resource name", async () => {
     expect(
       () =>

@@ -125,6 +125,44 @@ function parseMemo(value: unknown): Memo {
   return value as Memo;
 }
 
+interface MemoList {
+  memos: Memo[];
+  nextPageToken?: string;
+}
+
+function parseMemoList(value: unknown): MemoList {
+  if (!isRecord(value)) {
+    throw new MemosApiError(
+      "INVALID_RESPONSE",
+      "The Memos instance returned an invalid memo list response.",
+      { details: value },
+    );
+  }
+
+  const rawMemos = value.memos ?? [];
+  if (!Array.isArray(rawMemos)) {
+    throw new MemosApiError(
+      "INVALID_RESPONSE",
+      "The Memos instance returned an invalid memo list response.",
+      { details: value },
+    );
+  }
+
+  const nextPageToken = value.nextPageToken;
+  if (nextPageToken !== undefined && typeof nextPageToken !== "string") {
+    throw new MemosApiError(
+      "INVALID_RESPONSE",
+      "The Memos instance returned an invalid memo list response.",
+      { details: value },
+    );
+  }
+
+  return {
+    memos: rawMemos.map(parseMemo),
+    nextPageToken,
+  };
+}
+
 function memoResourceName(input: string): { id: string; name: string } {
   const value = input.trim();
   const id = value.startsWith("memos/") ? value.slice("memos/".length) : value;
@@ -157,24 +195,65 @@ export class MemosClient {
   }
 
   async createMemo(content: string): Promise<Memo> {
-    return this.requestMemo("/memos", {
+    return parseMemo(await this.request("/memos", {
       method: "POST",
       body: JSON.stringify({ content, visibility: "PRIVATE" }),
-    });
+    }));
   }
 
   async updateMemo(nameOrId: string, content: string): Promise<Memo> {
     const memo = memoResourceName(nameOrId);
-    return this.requestMemo(
+    return parseMemo(await this.request(
       `/memos/${encodeURIComponent(memo.id)}?updateMask=content`,
       {
         method: "PATCH",
         body: JSON.stringify({ name: memo.name, content }),
       },
-    );
+    ));
   }
 
-  private async requestMemo(path: string, init: RequestInit): Promise<Memo> {
+  /** Returns all normal memos whose content contains the given text fragment. */
+  async listMemosContaining(fragment: string): Promise<Memo[]> {
+    if (!fragment) {
+      return [];
+    }
+
+    const memos: Memo[] = [];
+    let pageToken = "";
+    const seenPageTokens = new Set<string>();
+
+    do {
+      const query = new URLSearchParams({
+        pageSize: "1000",
+        filter: `content.contains(${JSON.stringify(fragment)})`,
+      });
+      if (pageToken) {
+        query.set("pageToken", pageToken);
+      }
+
+      const page = parseMemoList(await this.request(`/memos?${query.toString()}`, {
+        method: "GET",
+      }));
+      memos.push(...page.memos);
+
+      const nextPageToken = page.nextPageToken ?? "";
+      if (nextPageToken && seenPageTokens.has(nextPageToken)) {
+        throw new MemosApiError(
+          "INVALID_RESPONSE",
+          "The Memos instance returned a repeated page token.",
+          { details: nextPageToken },
+        );
+      }
+      if (nextPageToken) {
+        seenPageTokens.add(nextPageToken);
+      }
+      pageToken = nextPageToken;
+    } while (pageToken);
+
+    return memos;
+  }
+
+  private async request(path: string, init: RequestInit): Promise<unknown> {
     let response: Response;
     try {
       response = await this.fetchImpl(`${this.apiBaseUrl}${path}`, {
@@ -234,6 +313,6 @@ export class MemosClient {
       );
     }
 
-    return parseMemo(data);
+    return data;
   }
 }

@@ -30,6 +30,8 @@ const TRACKING_PARAMETERS = new Set([
   "yclid",
 ]);
 
+const WEB_URL_PATTERN = /https?:\/\/[^\s<>"'`]+/giu;
+
 function isTrackingParameter(name: string): boolean {
   const normalized = name.toLowerCase();
   return normalized.startsWith("utm_") || TRACKING_PARAMETERS.has(normalized);
@@ -83,6 +85,45 @@ export function buildClipContent({ url }: ClipData): string {
   }
 
   return cleanedUrl;
+}
+
+function trimUnbalancedClosingDelimiters(value: string): string {
+  let result = value.replace(/[.,!?;:]+$/u, "");
+  const delimiterPairs = [
+    ["(", ")"],
+    ["[", "]"],
+    ["{", "}"],
+  ] as const;
+
+  for (const [opening, closing] of delimiterPairs) {
+    const openingCount = [...result].filter((character) => character === opening).length;
+    let closingCount = [...result].filter((character) => character === closing).length;
+    while (result.endsWith(closing) && closingCount > openingCount) {
+      result = result.slice(0, -1);
+      closingCount -= 1;
+    }
+  }
+
+  return result;
+}
+
+/** Finds unique web links and normalizes them in the same way as clipped URLs. */
+export function extractWebUrls(content: string): string[] {
+  const urls = new Set<string>();
+
+  for (const match of content.matchAll(WEB_URL_PATTERN)) {
+    const candidate = trimUnbalancedClosingDelimiters(match[0]);
+    try {
+      const url = new URL(candidate);
+      if (url.protocol === "http:" || url.protocol === "https:") {
+        urls.add(cleanTrackingUrl(url.toString()));
+      }
+    } catch {
+      // Ignore URL-like text that is not a valid web URL.
+    }
+  }
+
+  return [...urls];
 }
 
 export function withDefaultTag(content: string, defaultTag: string): string {

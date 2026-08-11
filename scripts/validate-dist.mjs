@@ -24,6 +24,13 @@ for (const relativePath of referencedFiles) {
   await access(resolve(distDirectory, relativePath));
 }
 
+for (const htmlFile of [manifest.action.default_popup, manifest.options_page]) {
+  const html = await readFile(resolve(distDirectory, htmlFile), "utf8");
+  if (/rel=["']modulepreload["']/u.test(html)) {
+    throw new Error(`${htmlFile} contains an unsupported module preload.`);
+  }
+}
+
 if (manifest.commands && Object.keys(manifest.commands).length > 0) {
   throw new Error("Manifest must not declare keyboard commands.");
 }

@@ -25,7 +25,14 @@ npm run validate:dist
 
 ## Release
 
-Before releasing, update the version in both `package.json` and `public/manifest.json` to the same value. Then push the matching `vX.Y.Z` tag, for example:
+Bump or sync the version across `package.json`, `package-lock.json`, and `public/manifest.json`:
+
+```bash
+npm run version:sync -- patch   # or minor / major / 0.2.0
+npm run version:sync            # sync lock + manifest to package.json
+```
+
+Commit the version files, then push the matching `vX.Y.Z` tag, for example:
 
 ```bash
 git tag v0.1.0

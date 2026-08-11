@@ -1,6 +1,10 @@
 import "./popup.css";
 
-import { withDefaultTag, buildClipContent } from "./lib/content";
+import {
+  buildClipContent,
+  extractWebUrls,
+  withDefaultTag,
+} from "./lib/content";
 import {
   applyDocumentLocale,
   formatNumber,
@@ -28,6 +32,10 @@ interface Elements {
   tagHint: HTMLElement;
   characterCount: HTMLElement;
   status: HTMLElement;
+  duplicateWarning: HTMLElement;
+  duplicateMessage: HTMLElement;
+  duplicateCancelButton: HTMLButtonElement;
+  duplicateContinueButton: HTMLButtonElement;
   clipButton: HTMLButtonElement;
   submitButton: HTMLButtonElement;
   submitLabel: HTMLElement;
@@ -47,6 +55,7 @@ let composerState: ComposerState = emptyComposerState();
 let composerTabId: number | undefined;
 let busy = false;
 let saveTimer: number | undefined;
+let duplicateDecisionResolver: ((shouldSave: boolean) => void) | undefined;
 
 function renderPage(): void {
   app.innerHTML = `
@@ -107,6 +116,31 @@ function renderPage(): void {
 
       <div class="status" id="status" role="status" aria-live="polite" hidden></div>
 
+      <section
+        class="duplicate-warning"
+        id="duplicateWarning"
+        role="status"
+        aria-live="polite"
+        aria-labelledby="duplicateMessage"
+        hidden
+      >
+        <div class="duplicate-warning-heading">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 8v4.25M12 16.25h.01" />
+            <circle cx="12" cy="12" r="9" />
+          </svg>
+          <p id="duplicateMessage"></p>
+        </div>
+        <div class="duplicate-warning-actions">
+          <button class="duplicate-action secondary" id="duplicateCancelButton" type="button">
+            ${t("popup.cancelDuplicateSave")}
+          </button>
+          <button class="duplicate-action primary" id="duplicateContinueButton" type="button">
+            ${t("popup.continueDuplicateSave")}
+          </button>
+        </div>
+      </section>
+
       <footer class="actions">
         <button class="button secondary" id="clipButton" type="button">
           <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -134,6 +168,14 @@ function renderPage(): void {
     tagHint: getElement<HTMLElement>("tagHint"),
     characterCount: getElement<HTMLElement>("characterCount"),
     status: getElement<HTMLElement>("status"),
+    duplicateWarning: getElement<HTMLElement>("duplicateWarning"),
+    duplicateMessage: getElement<HTMLElement>("duplicateMessage"),
+    duplicateCancelButton: getElement<HTMLButtonElement>(
+      "duplicateCancelButton",
+    ),
+    duplicateContinueButton: getElement<HTMLButtonElement>(
+      "duplicateContinueButton",
+    ),
     clipButton: getElement<HTMLButtonElement>("clipButton"),
     submitButton: getElement<HTMLButtonElement>("submitButton"),
     submitLabel: getElement<HTMLElement>("submitLabel"),
@@ -144,6 +186,12 @@ function renderPage(): void {
   elements.newMemoButton.addEventListener("click", startNewMemo);
   elements.clipButton.addEventListener("click", () => void clipCurrentPage());
   elements.submitButton.addEventListener("click", () => void submitMemo());
+  elements.duplicateCancelButton.addEventListener("click", () => {
+    resolveDuplicateLinkDecision(false);
+  });
+  elements.duplicateContinueButton.addEventListener("click", () => {
+    resolveDuplicateLinkDecision(true);
+  });
   elements.content.addEventListener("input", handleContentInput);
   elements.content.addEventListener("keydown", (event) => {
     if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
@@ -341,9 +389,38 @@ async function submitMemo(): Promise<void> {
 
   setBusy(true);
   hideStatus();
+  hideDuplicateWarning();
 
   try {
     const client = new MemosClient(config);
+    if (!composerState.lastMemoName) {
+      const links = extractWebUrls(draft);
+      if (links.length > 0) {
+        const candidatePages = await Promise.all(
+          links.map((link) => client.listMemosContaining(link)),
+        );
+        const wantedLinks = new Set(links);
+        const duplicateNames = new Set(
+          candidatePages
+            .flat()
+            .filter((memo) =>
+              extractWebUrls(memo.content).some((link) => wantedLinks.has(link)),
+            )
+            .map((memo) => memo.name),
+        );
+
+        if (duplicateNames.size > 0) {
+          const shouldSave = await requestDuplicateLinkDecision(
+            duplicateNames.size,
+          );
+          if (!shouldSave) {
+            showStatus(t("popup.duplicateSaveCancelled"), "info");
+            return;
+          }
+        }
+      }
+    }
+
     const memo = composerState.lastMemoName
       ? await client.updateMemo(composerState.lastMemoName, content)
       : await client.createMemo(content);
@@ -366,6 +443,34 @@ async function submitMemo(): Promise<void> {
   } finally {
     setBusy(false);
   }
+}
+
+function requestDuplicateLinkDecision(count: number): Promise<boolean> {
+  elements.duplicateMessage.textContent = t("popup.confirmDuplicateLink", {
+    count: formatNumber(count),
+  });
+  elements.duplicateWarning.hidden = false;
+  elements.duplicateCancelButton.focus();
+
+  return new Promise((resolve) => {
+    duplicateDecisionResolver = resolve;
+  });
+}
+
+function resolveDuplicateLinkDecision(shouldSave: boolean): void {
+  const resolve = duplicateDecisionResolver;
+  if (!resolve) {
+    return;
+  }
+
+  duplicateDecisionResolver = undefined;
+  hideDuplicateWarning();
+  resolve(shouldSave);
+}
+
+function hideDuplicateWarning(): void {
+  elements.duplicateWarning.hidden = true;
+  elements.duplicateMessage.textContent = "";
 }
 
 function setBusy(nextBusy: boolean): void {

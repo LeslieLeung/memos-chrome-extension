@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildClipContent,
   cleanTrackingUrl,
+  extractWebUrls,
   withDefaultTag,
 } from "../src/lib/content";
 
@@ -34,6 +35,31 @@ describe("cleanTrackingUrl", () => {
     expect(cleanTrackingUrl("https://name:secret@example.com/a?ok=1")).toBe(
       "https://example.com/a?ok=1",
     );
+  });
+});
+
+describe("extractWebUrls", () => {
+  it("extracts, cleans, and de-duplicates web links", () => {
+    expect(
+      extractWebUrls(
+        "Read https://example.com/a?id=7&utm_source=test, then https://example.com/a?id=7.",
+      ),
+    ).toEqual(["https://example.com/a?id=7"]);
+  });
+
+  it("handles Markdown punctuation without truncating balanced URL delimiters", () => {
+    expect(
+      extractWebUrls(
+        "[guide](https://example.com/a_(b)) and <https://example.com/other>.",
+      ),
+    ).toEqual([
+      "https://example.com/a_(b)",
+      "https://example.com/other",
+    ]);
+  });
+
+  it("ignores non-web and invalid URL-like text", () => {
+    expect(extractWebUrls("chrome://extensions and https://[invalid")).toEqual([]);
   });
 });
 

@@ -5,6 +5,10 @@ export default defineConfig({
     outDir: "dist",
     emptyOutDir: true,
     sourcemap: true,
+    // Chrome extension pages can execute module scripts in a different world
+    // from speculative preloads, which makes Vite's generated preload links
+    // unusable and produces cross-world mismatch warnings.
+    modulePreload: false,
     rollupOptions: {
       input: {
         popup: "popup.html",

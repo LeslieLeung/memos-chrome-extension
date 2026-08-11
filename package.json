@@ -1,6 +1,6 @@
 {
   "name": "memos-chrome-extension",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "Create and clip Memos directly from Chrome.",
@@ -11,7 +11,8 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "validate:dist": "node scripts/validate-dist.mjs"
+    "validate:dist": "node scripts/validate-dist.mjs",
+    "version:sync": "node scripts/sync-version.mjs"
   },
   "engines": {
     "node": ">=20.19"

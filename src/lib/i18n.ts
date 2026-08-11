@@ -36,6 +36,11 @@ const en = {
   "popup.invalidPage": "This page cannot be clipped. Open a regular web page and try again.",
   "popup.confirmReplaceDraft": "Replace the content in the editor with this page?",
   "popup.currentPageFilled": "The current page was added. Review it before creating the memo.",
+  "popup.confirmDuplicateLink":
+    "Found {{count}} existing memo(s) with the same link. Save another one anyway?",
+  "popup.cancelDuplicateSave": "Cancel save",
+  "popup.continueDuplicateSave": "Save anyway",
+  "popup.duplicateSaveCancelled": "Not saved. You can keep editing this memo.",
   "popup.emptyMemo": "Write something before creating a memo.",
   "popup.noChanges": "There are no changes to save.",
   "popup.savedAndContinue": "Saved to Memos. You can keep editing this memo.",
@@ -130,6 +135,11 @@ const zhCN: Record<TranslationKey, string> = {
   "popup.invalidPage": "当前页面无法剪藏，请打开一个普通网页后再试。",
   "popup.confirmReplaceDraft": "用当前网页替换编辑器里的内容吗？",
   "popup.currentPageFilled": "已填入当前网页，检查内容后即可创建。",
+  "popup.confirmDuplicateLink":
+    "发现 {{count}} 条已有 Memo 包含同一链接，仍要继续保存吗？",
+  "popup.cancelDuplicateSave": "取消保存",
+  "popup.continueDuplicateSave": "仍然保存",
+  "popup.duplicateSaveCancelled": "已取消保存，你可以继续编辑。",
   "popup.emptyMemo": "先写点内容，再创建 Memo。",
   "popup.noChanges": "内容没有变化，无需重复保存。",
   "popup.savedAndContinue": "已保存到 Memos。你可以继续修改这条 Memo。",

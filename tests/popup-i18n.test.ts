@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const localData: Record<string, unknown> = {};
 const sessionData: Record<string, unknown> = {};
 const queryTabs = vi.fn();
+const fetchMock = vi.fn<typeof fetch>();
 
 beforeEach(() => {
   localData["memos.config"] = {
@@ -17,7 +18,10 @@ beforeEach(() => {
   }
   queryTabs.mockReset();
   queryTabs.mockResolvedValue([]);
+  fetchMock.mockReset();
   document.body.innerHTML = '<div id="app"></div>';
+
+  vi.stubGlobal("fetch", fetchMock);
 
   vi.stubGlobal(
     "chrome",
@@ -48,6 +52,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
   document.body.innerHTML = "";
   document.documentElement.lang = "";
@@ -134,5 +139,125 @@ describe("popup language", () => {
     expect(sessionData["memos.composerState.17"]).toMatchObject({
       draft: "Keep this note",
     });
+  });
+
+  it("does not create a memo when the duplicate-link confirmation is cancelled", async () => {
+    sessionData["memos.composerState.23"] = {
+      draft: "https://example.com/read?id=42",
+      updatedAt: 1,
+    };
+    queryTabs.mockResolvedValue([{ id: 23 }]);
+    fetchMock.mockResolvedValueOnce(
+      Response.json({
+        memos: [
+          {
+            name: "memos/existing",
+            content:
+              "Saved https://example.com/read?id=42&utm_source=newsletter",
+            visibility: "PRIVATE",
+          },
+        ],
+      }),
+    );
+    const confirm = vi.spyOn(window, "confirm");
+
+    await import("../src/popup.ts");
+
+    await vi.waitFor(() => {
+      expect(document.querySelector<HTMLTextAreaElement>("#memoContent")?.value).toBe(
+        "https://example.com/read?id=42",
+      );
+    });
+
+    document.querySelector<HTMLButtonElement>("#submitButton")?.click();
+
+    await vi.waitFor(() => {
+      expect(document.querySelector("#duplicateMessage")?.textContent).toBe(
+        "Found 1 existing memo(s) with the same link. Save another one anyway?",
+      );
+      expect(
+        document.querySelector<HTMLElement>("#duplicateWarning")?.hidden,
+      ).toBe(false);
+    });
+
+    document
+      .querySelector<HTMLButtonElement>("#duplicateCancelButton")
+      ?.click();
+
+    await vi.waitFor(() => {
+      expect(document.querySelector("#status")?.textContent).toBe(
+        "Not saved. You can keep editing this memo.",
+      );
+      expect(
+        document.querySelector<HTMLElement>("#duplicateWarning")?.hidden,
+      ).toBe(true);
+    });
+
+    expect(confirm).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/api/v1/memos?"),
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(sessionData["memos.composerState.23"]).not.toHaveProperty(
+      "lastMemoName",
+    );
+  });
+
+  it("creates the memo when the inline duplicate warning is accepted", async () => {
+    sessionData["memos.composerState.24"] = {
+      draft: "https://example.com/read?id=42",
+      updatedAt: 1,
+    };
+    queryTabs.mockResolvedValue([{ id: 24 }]);
+    fetchMock
+      .mockResolvedValueOnce(
+        Response.json({
+          memos: [
+            {
+              name: "memos/existing",
+              content: "https://example.com/read?id=42",
+              visibility: "PRIVATE",
+            },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(
+        Response.json({
+          name: "memos/new",
+          content: "https://example.com/read?id=42\n\n#inbox",
+          visibility: "PRIVATE",
+        }),
+      );
+
+    await import("../src/popup.ts");
+
+    await vi.waitFor(() => {
+      expect(document.querySelector<HTMLTextAreaElement>("#memoContent")?.value).toBe(
+        "https://example.com/read?id=42",
+      );
+    });
+
+    document.querySelector<HTMLButtonElement>("#submitButton")?.click();
+
+    await vi.waitFor(() => {
+      expect(
+        document.querySelector<HTMLElement>("#duplicateWarning")?.hidden,
+      ).toBe(false);
+    });
+
+    document
+      .querySelector<HTMLButtonElement>("#duplicateContinueButton")
+      ?.click();
+
+    await vi.waitFor(() => {
+      expect(sessionData["memos.composerState.24"]).toMatchObject({
+        lastMemoName: "memos/new",
+      });
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[1]?.[1]).toEqual(
+      expect.objectContaining({ method: "POST" }),
+    );
   });
 });
