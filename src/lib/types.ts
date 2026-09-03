@@ -29,6 +29,11 @@ export interface ExtensionConfig {
   instanceUrl: string;
   apiKey: string;
   defaultTag: string;
+  /**
+   * Template rendered into a fresh memo when a page is clipped. Supports the
+   * {{content}}, {{title}}, {{url}}, and {{description}} placeholders.
+   */
+  clipTemplate: string;
   /** Automatically prefill a new, empty composer with the current page URL. */
   clipOnOpen: boolean;
   language: LanguagePreference;
@@ -44,6 +49,12 @@ export interface ComposerState {
 export interface ClipData {
   url: string;
   title: string;
+  /** Selected text on the page; empty when nothing is selected. */
+  content?: string;
+  /** Page meta description; empty when unavailable. */
+  description?: string;
+  /** Default tag rendered for the {{tag}} template variable. */
+  tag?: string;
 }
 
 export type MemoVisibility =

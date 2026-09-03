@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const localData: Record<string, unknown> = {};
 const sessionData: Record<string, unknown> = {};
 const queryTabs = vi.fn();
+const executeScript = vi.fn();
 const fetchMock = vi.fn<typeof fetch>();
 
 beforeEach(() => {
@@ -18,6 +19,8 @@ beforeEach(() => {
   }
   queryTabs.mockReset();
   queryTabs.mockResolvedValue([]);
+  executeScript.mockReset();
+  executeScript.mockResolvedValue([{ result: null }]);
   fetchMock.mockReset();
   document.body.innerHTML = '<div id="app"></div>';
 
@@ -39,6 +42,9 @@ beforeEach(() => {
             delete sessionData[key];
           },
         },
+      },
+      scripting: {
+        executeScript,
       },
       tabs: {
         query: queryTabs,
@@ -100,13 +106,123 @@ describe("popup language", () => {
 
     await vi.waitFor(() => {
       expect(document.querySelector<HTMLTextAreaElement>("#memoContent")?.value).toBe(
-        "https://example.com/read?id=42",
+        "[Useful page](https://example.com/read?id=42)\n\n#inbox",
       );
     });
 
     expect(sessionData["memos.composerState.17"]).toMatchObject({
-      draft: "https://example.com/read?id=42",
+      draft: "[Useful page](https://example.com/read?id=42)\n\n#inbox",
     });
+  });
+
+  it("renders the clip template with the page selection and description", async () => {
+    localData["memos.config"] = {
+      instanceUrl: "https://memos.example.com",
+      apiKey: "token",
+      defaultTag: "#inbox",
+      clipOnOpen: true,
+      clipTemplate: "{{content}}\n\n{{description}}\n\n[{{title}}]({{url}})",
+      language: "en",
+    };
+    queryTabs.mockResolvedValue([
+      {
+        id: 31,
+        title: "Designing a personal archive",
+        url: "https://example.com/archive?utm_source=x",
+      },
+    ]);
+    executeScript.mockResolvedValue([
+      {
+        result: {
+          selection: "  Keep this quote  ",
+          description: "A practical guide.",
+        },
+      },
+    ]);
+
+    await import("../src/popup.ts");
+
+    await vi.waitFor(() => {
+      expect(document.querySelector<HTMLTextAreaElement>("#memoContent")?.value).toBe(
+        "Keep this quote\n\nA practical guide.\n\n[Designing a personal archive](https://example.com/archive)",
+      );
+    });
+    expect(executeScript).toHaveBeenCalledWith(
+      expect.objectContaining({
+        target: expect.objectContaining({ tabId: 31, allFrames: true }),
+      }),
+    );
+    expect(executeScript).toHaveBeenCalledOnce();
+    expect(sessionData["memos.composerState.31"]).toMatchObject({
+      draft: "Keep this quote\n\nA practical guide.\n\n[Designing a personal archive](https://example.com/archive)",
+    });
+  });
+
+  it("merges the initial capture with a fresh one on manual clip", async () => {
+    localData["memos.config"] = {
+      instanceUrl: "https://memos.example.com",
+      apiKey: "token",
+      defaultTag: "#inbox",
+      clipOnOpen: false,
+      clipTemplate: "{{content}}\n\n{{description}}\n\n[{{title}}]({{url}})",
+      language: "en",
+    };
+    queryTabs.mockResolvedValue([
+      {
+        id: 55,
+        title: "Useful page",
+        url: "https://example.com/read",
+      },
+    ]);
+    executeScript
+      .mockResolvedValueOnce([
+        { result: { selection: "Page pick", description: "" } },
+      ])
+      .mockResolvedValue([
+        { result: { selection: "", description: "Fresh guide." } },
+      ]);
+
+    await import("../src/popup.ts");
+
+    await vi.waitFor(() => {
+      expect(executeScript).toHaveBeenCalledOnce();
+    });
+
+    document.querySelector<HTMLButtonElement>("#clipButton")?.click();
+
+    await vi.waitFor(() => {
+      expect(document.querySelector<HTMLTextAreaElement>("#memoContent")?.value).toBe(
+        "Page pick\n\nFresh guide.\n\n[Useful page](https://example.com/read)",
+      );
+    });
+  });
+
+  it("clips without extras when script injection fails", async () => {
+    localData["memos.config"] = {
+      instanceUrl: "https://memos.example.com",
+      apiKey: "token",
+      defaultTag: "#inbox",
+      clipOnOpen: true,
+      language: "en",
+    };
+    queryTabs.mockResolvedValue([
+      {
+        id: 42,
+        title: "Useful page",
+        url: "https://example.com/read",
+      },
+    ]);
+    executeScript.mockRejectedValue(new Error("cannot inject"));
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    await import("../src/popup.ts");
+
+    await vi.waitFor(() => {
+      expect(document.querySelector<HTMLTextAreaElement>("#memoContent")?.value).toBe(
+        "[Useful page](https://example.com/read)\n\n#inbox",
+      );
+    });
+    expect(warn).toHaveBeenCalled();
   });
 
   it("does not replace an existing tab draft when default clipping is enabled", async () => {

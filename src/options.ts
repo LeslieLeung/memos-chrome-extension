@@ -11,6 +11,13 @@ import {
   setLanguagePreference,
   t,
 } from "./lib/i18n";
+import {
+  DEFAULT_CLIP_TEMPLATE,
+  isTemplateVariable,
+  renderClipTemplate,
+  templateToken,
+} from "./lib/template";
+import type { TemplateVariable, TemplateVariables } from "./lib/template";
 import { isLanguagePreference } from "./lib/types";
 import type { ExtensionConfig, LanguagePreference } from "./lib/types";
 import { loadConfig, saveConfig } from "./storage";
@@ -21,6 +28,7 @@ interface FormDraft {
   instanceUrl: string;
   apiKey: string;
   defaultTag: string;
+  clipTemplate: string;
   clipOnOpen: boolean;
 }
 
@@ -30,6 +38,10 @@ interface Elements {
   instanceUrlInput: HTMLInputElement;
   apiKeyInput: HTMLInputElement;
   defaultTagInput: HTMLInputElement;
+  clipTemplateInput: HTMLTextAreaElement;
+  templateResetButton: HTMLButtonElement;
+  templatePreviewOutput: HTMLElement;
+  templateVariableButtons: HTMLButtonElement[];
   clipOnOpenInput: HTMLInputElement;
   saveButton: HTMLButtonElement;
   status: HTMLElement;
@@ -66,6 +78,59 @@ function normalizeDefaultTag(rawValue: string): string {
   } catch {
     throw new Error(t("options.invalidDefaultTag"));
   }
+}
+
+function normalizeClipTemplate(rawValue: string): string {
+  const value = rawValue.trim();
+  return value || DEFAULT_CLIP_TEMPLATE;
+}
+
+/** Sample data for the template preview; mirrors a clipped article. */
+function templateSampleVariables(): TemplateVariables {
+  return {
+    content: t("options.templateSampleContent"),
+    title: t("options.templateSampleTitle"),
+    url: "https://example.com/designing-a-personal-archive?utm_source=demo",
+    description: t("options.templateSampleDescription"),
+    tag: sampleTag(),
+  };
+}
+
+/** Previews the configured default tag, falling back to a readable sample. */
+function sampleTag(): string {
+  try {
+    return normalizeConfigTag(elements.defaultTagInput.value) || "#inbox";
+  } catch {
+    return "#inbox";
+  }
+}
+
+function updateTemplatePreview(): void {
+  elements.templatePreviewOutput.textContent = renderClipTemplate(
+    elements.clipTemplateInput.value,
+    templateSampleVariables(),
+  );
+}
+
+function insertTemplateVariable(variable: TemplateVariable): void {
+  const input = elements.clipTemplateInput;
+  const token = templateToken(variable);
+  const start = input.selectionStart ?? input.value.length;
+  const end = input.selectionEnd ?? start;
+
+  input.value = `${input.value.slice(0, start)}${token}${input.value.slice(end)}`;
+  const caret = start + token.length;
+  input.setSelectionRange(caret, caret);
+  input.focus();
+  updateTemplatePreview();
+  handleFormInput();
+}
+
+function resetTemplate(): void {
+  elements.clipTemplateInput.value = DEFAULT_CLIP_TEMPLATE;
+  updateTemplatePreview();
+  handleFormInput();
+  elements.clipTemplateInput.focus();
 }
 
 function renderPage(draft?: FormDraft): void {
@@ -131,7 +196,9 @@ function renderPage(draft?: FormDraft): void {
           placeholder="#inbox"
           aria-describedby="tag-hint"
         />
-        <p class="hint" id="tag-hint">${t("options.defaultTagHint")}</p>
+        <p class="hint" id="tag-hint">
+          ${t("options.defaultTagHint", { tag: "{{tag}}" })}
+        </p>
       </div>
 
       <div class="field">
@@ -148,6 +215,36 @@ function renderPage(draft?: FormDraft): void {
         <p class="hint" id="clip-on-open-hint">${t("options.clipOnOpenHint")}</p>
       </div>
 
+      <div class="field">
+        <label for="clip-template">${t("options.clipTemplate")}</label>
+        <div class="template-chips" role="group" aria-label="${t("options.templateVariables")}">
+          <button type="button" class="chip" data-template-variable="content">{{content}}</button>
+          <button type="button" class="chip" data-template-variable="title">{{title}}</button>
+          <button type="button" class="chip" data-template-variable="url">{{url}}</button>
+          <button type="button" class="chip" data-template-variable="description">{{description}}</button>
+          <button type="button" class="chip" data-template-variable="tag">{{tag}}</button>
+        </div>
+        <textarea
+          id="clip-template"
+          name="clipTemplate"
+          rows="4"
+          spellcheck="false"
+          aria-describedby="clip-template-hint"
+        ></textarea>
+        <p class="hint" id="clip-template-hint">
+          ${t("options.clipTemplateHint", {
+            vars: "{{content}}, {{title}}, {{url}}, {{description}}, {{tag}}",
+          })}
+        </p>
+        <button type="button" class="chip" id="template-reset">
+          ${t("options.templateReset")}
+        </button>
+        <div class="template-preview" aria-live="polite">
+          <span class="template-preview-label">${t("options.templatePreview")}</span>
+          <pre id="template-preview-output"></pre>
+        </div>
+      </div>
+
       <div class="actions">
         <button id="save-button" type="submit">${t("options.saveSettings")}</button>
         <p id="status" role="status" aria-live="polite" hidden></p>
@@ -161,6 +258,14 @@ function renderPage(draft?: FormDraft): void {
     instanceUrlInput: getElement<HTMLInputElement>("instance-url"),
     apiKeyInput: getElement<HTMLInputElement>("api-key"),
     defaultTagInput: getElement<HTMLInputElement>("default-tag"),
+    clipTemplateInput: getElement<HTMLTextAreaElement>("clip-template"),
+    templateResetButton: getElement<HTMLButtonElement>("template-reset"),
+    templatePreviewOutput: getElement<HTMLElement>("template-preview-output"),
+    templateVariableButtons: [
+      ...getElement<HTMLElement>("options-form").querySelectorAll<HTMLButtonElement>(
+        "[data-template-variable]",
+      ),
+    ],
     clipOnOpenInput: getElement<HTMLInputElement>("clip-on-open"),
     saveButton: getElement<HTMLButtonElement>("save-button"),
     status: getElement<HTMLElement>("status"),
@@ -170,12 +275,26 @@ function renderPage(draft?: FormDraft): void {
     void handleSubmit(event);
   });
   elements.form.addEventListener("input", handleFormInput);
+  elements.clipTemplateInput.addEventListener("input", updateTemplatePreview);
+  elements.defaultTagInput.addEventListener("input", updateTemplatePreview);
+  elements.templateResetButton.addEventListener("click", resetTemplate);
+  for (const button of elements.templateVariableButtons) {
+    button.addEventListener("click", () => {
+      const variable = button.dataset.templateVariable;
+      if (isTemplateVariable(variable)) {
+        insertTemplateVariable(variable);
+      }
+    });
+  }
   elements.languageInput.addEventListener("change", () => {
     void handleLanguageChange();
   });
 
   if (currentConfig) {
     fillForm(currentConfig, draft);
+  } else {
+    elements.clipTemplateInput.value = DEFAULT_CLIP_TEMPLATE;
+    updateTemplatePreview();
   }
   updateFormAvailability();
   app.removeAttribute("aria-busy");
@@ -207,6 +326,11 @@ function updateFormAvailability(): void {
   elements.saveButton.disabled = isSaving;
   elements.languageInput.disabled = isSaving || isChangingLanguage;
   elements.clipOnOpenInput.disabled = isSaving || isChangingLanguage;
+  elements.clipTemplateInput.disabled = isSaving || isChangingLanguage;
+  elements.templateResetButton.disabled = isSaving || isChangingLanguage;
+  for (const button of elements.templateVariableButtons) {
+    button.disabled = isSaving || isChangingLanguage;
+  }
   elements.form.setAttribute(
     "aria-busy",
     String(isSaving || isChangingLanguage),
@@ -223,6 +347,7 @@ function readForm(): ExtensionConfig {
     instanceUrl: normalizeInstanceUrl(elements.instanceUrlInput.value),
     apiKey,
     defaultTag: normalizeDefaultTag(elements.defaultTagInput.value),
+    clipTemplate: normalizeClipTemplate(elements.clipTemplateInput.value),
     clipOnOpen: elements.clipOnOpenInput.checked,
     language: selectedLanguage(),
   };
@@ -238,6 +363,7 @@ function readFormDraft(): FormDraft {
     instanceUrl: elements.instanceUrlInput.value,
     apiKey: elements.apiKeyInput.value,
     defaultTag: elements.defaultTagInput.value,
+    clipTemplate: elements.clipTemplateInput.value,
     clipOnOpen: elements.clipOnOpenInput.checked,
   };
 }
@@ -246,8 +372,10 @@ function fillForm(config: ExtensionConfig, draft?: FormDraft): void {
   elements.instanceUrlInput.value = draft?.instanceUrl ?? config.instanceUrl;
   elements.apiKeyInput.value = draft?.apiKey ?? config.apiKey;
   elements.defaultTagInput.value = draft?.defaultTag ?? config.defaultTag;
+  elements.clipTemplateInput.value = draft?.clipTemplate ?? config.clipTemplate;
   elements.clipOnOpenInput.checked = draft?.clipOnOpen ?? config.clipOnOpen;
   elements.languageInput.value = config.language;
+  updateTemplatePreview();
 }
 
 async function initialize(): Promise<void> {

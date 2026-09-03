@@ -1,4 +1,5 @@
 import { normalizeDefaultTag } from "./config";
+import { renderClipTemplate } from "./template";
 import type { ClipData } from "./types";
 
 const TRACKING_PARAMETERS = new Set([
@@ -71,8 +72,8 @@ export function cleanTrackingUrl(input: string): string {
   return url.toString();
 }
 
-export function buildClipContent({ url }: ClipData): string {
-  const cleanedUrl = cleanTrackingUrl(url);
+export function buildClipContent(data: ClipData, template: string): string {
+  const cleanedUrl = cleanTrackingUrl(data.url);
 
   let parsed: URL;
   try {
@@ -80,11 +81,26 @@ export function buildClipContent({ url }: ClipData): string {
   } catch {
     throw new TypeError("The current page does not have a valid web URL.");
   }
-  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+  if (parsed.protocol !== "http" && parsed.protocol !== "https:") {
     throw new TypeError("Only http and https pages can be clipped.");
   }
 
-  return cleanedUrl;
+  return renderClipTemplate(template, {
+    content: data.content?.trim() ?? "",
+    title: data.title.trim(),
+    url: cleanedUrl,
+    description: data.description?.trim() ?? "",
+    tag: safeDefaultTag(data.tag),
+  });
+}
+
+/** Normalizes the configured default tag; invalid values render as empty. */
+function safeDefaultTag(value: string | undefined): string {
+  try {
+    return normalizeDefaultTag(value ?? "");
+  } catch {
+    return "";
+  }
 }
 
 function trimUnbalancedClosingDelimiters(value: string): string {
@@ -124,25 +140,4 @@ export function extractWebUrls(content: string): string[] {
   }
 
   return [...urls];
-}
-
-export function withDefaultTag(content: string, defaultTag: string): string {
-  const tag = normalizeDefaultTag(defaultTag);
-  if (!tag) {
-    return content;
-  }
-
-  const escapedTag = tag.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const tagToken = new RegExp(
-    `(^|[\\s([{"'])${escapedTag}(?=$|[\\s.,!?;:\uFF0C\u3002\uFF01\uFF1F\uFF1B\uFF1A)\\]}"'])`,
-    "u",
-  );
-  if (tagToken.test(content)) {
-    return content;
-  }
-
-  const withoutTrailingWhitespace = content.trimEnd();
-  return withoutTrailingWhitespace
-    ? `${withoutTrailingWhitespace}\n\n${tag}`
-    : tag;
 }

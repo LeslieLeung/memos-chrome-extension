@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { DEFAULT_CLIP_TEMPLATE } from "../src/lib/template";
 import {
   clearComposerState,
   loadComposerState,
@@ -88,6 +89,7 @@ describe("configuration storage", () => {
       instanceUrl: "https://memos.example.com",
       apiKey: "token",
       defaultTag: "#inbox",
+      clipTemplate: DEFAULT_CLIP_TEMPLATE,
       clipOnOpen: false,
       language: "system",
     });
@@ -98,6 +100,7 @@ describe("configuration storage", () => {
       instanceUrl: "https://memos.example.com",
       apiKey: "token",
       defaultTag: "#inbox",
+      clipTemplate: "{{title}} {{url}}",
       clipOnOpen: true,
       language: "en",
     });
@@ -105,12 +108,14 @@ describe("configuration storage", () => {
     await expect(loadConfig()).resolves.toMatchObject({
       language: "en",
       clipOnOpen: true,
+      clipTemplate: "{{title}} {{url}}",
     });
 
     localData["memos.config"] = {
       instanceUrl: "https://memos.example.com",
       apiKey: "token",
       defaultTag: "#inbox",
+      clipTemplate: "   ",
       clipOnOpen: "true",
       language: "fr",
     };
@@ -118,6 +123,7 @@ describe("configuration storage", () => {
     await expect(loadConfig()).resolves.toMatchObject({
       language: "system",
       clipOnOpen: false,
+      clipTemplate: DEFAULT_CLIP_TEMPLATE,
     });
   });
 });

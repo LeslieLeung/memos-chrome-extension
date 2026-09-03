@@ -3,7 +3,6 @@ import "./popup.css";
 import {
   buildClipContent,
   extractWebUrls,
-  withDefaultTag,
 } from "./lib/content";
 import {
   applyDocumentLocale,
@@ -12,6 +11,7 @@ import {
   t,
 } from "./lib/i18n";
 import { MemosApiError, MemosClient } from "./lib/memos-api";
+import { DEFAULT_CLIP_TEMPLATE } from "./lib/template";
 import type { ComposerState, ExtensionConfig } from "./lib/types";
 import type { TranslationKey } from "./lib/i18n";
 import {
@@ -53,6 +53,7 @@ let elements: Elements;
 let config: ExtensionConfig | null = null;
 let composerState: ComposerState = emptyComposerState();
 let composerTabId: number | undefined;
+let initialPageDetails: Promise<PageDetails> | null = null;
 let busy = false;
 let saveTimer: number | undefined;
 let duplicateDecisionResolver: ((shouldSave: boolean) => void) | undefined;
@@ -223,6 +224,11 @@ async function initialize(): Promise<void> {
     composerTabId = tabId;
     composerState = storedState ?? emptyComposerState();
 
+    // Capture the page selection as early as possible: pages that collapse
+    // their selection on focus loss would otherwise return nothing by the
+    // time the user explicitly clips.
+    initialPageDetails = readPageDetails(tabId);
+
     if (
       storedState === null &&
       config?.clipOnOpen &&
@@ -343,7 +349,9 @@ async function clipCurrentPage(): Promise<void> {
  */
 async function applyDefaultClip(): Promise<void> {
   try {
-    const content = await currentPageClipContent();
+    const content = await currentPageClipContent({
+      reuseInitialDetails: true,
+    });
     composerState = {
       draft: content,
       updatedAt: Date.now(),
@@ -356,14 +364,93 @@ async function applyDefaultClip(): Promise<void> {
   }
 }
 
-async function currentPageClipContent(): Promise<string> {
+const EMPTY_PAGE_DETAILS: PageDetails = { selection: "", description: "" };
+
+async function currentPageClipContent(
+  options: { reuseInitialDetails?: boolean } = {},
+): Promise<string> {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  const url = tab?.url;
-  if (!url || !/^https?:\/\//i.test(url)) {
+  if (!tab?.url || !/^https?:\/\//i.test(tab.url)) {
     throw new Error(t("popup.invalidPage"));
   }
 
-  return buildClipContent({ title: tab.title ?? "", url });
+  const initial = await (initialPageDetails ??
+    Promise.resolve(EMPTY_PAGE_DETAILS));
+  const fresh = options.reuseInitialDetails
+    ? null
+    : await readPageDetails(tab.id);
+  const details = fresh
+    ? {
+        selection: fresh.selection || initial.selection,
+        description: fresh.description || initial.description,
+      }
+    : initial;
+
+  return buildClipContent(
+    {
+      title: tab.title ?? "",
+      url: tab.url,
+      content: details.selection,
+      description: details.description,
+      tag: config?.defaultTag,
+    },
+    config?.clipTemplate ?? DEFAULT_CLIP_TEMPLATE,
+  );
+}
+
+interface PageDetails {
+  selection: string;
+  description: string;
+}
+
+/**
+ * Runs inside the clipped page. Must stay self-contained: chrome.scripting
+ * serializes the function, so it cannot close over popup state.
+ */
+function collectPageDetails(): PageDetails {
+  const selection = window.getSelection()?.toString() ?? "";
+  const description = document.querySelector<HTMLMetaElement>(
+    'meta[name="description" i], meta[property="og:description" i]',
+  )?.content;
+  return { selection: selection.trim(), description: description?.trim() ?? "" };
+}
+
+/**
+ * Reads the page selection and meta description via one-off script injection
+ * into every frame, keeping the first non-empty value for each field.
+ * Restricted pages (chrome://, the Web Store, missing permission) simply clip
+ * without the extras instead of failing the whole clip.
+ */
+async function readPageDetails(tabId: number | undefined): Promise<PageDetails> {
+  if (typeof tabId !== "number" || tabId < 0 || !chrome.scripting?.executeScript) {
+    return EMPTY_PAGE_DETAILS;
+  }
+
+  try {
+    const injections = await chrome.scripting.executeScript({
+      target: { tabId, allFrames: true },
+      func: collectPageDetails,
+    });
+
+    let selection = "";
+    let description = "";
+    for (const injection of injections ?? []) {
+      const details = injection?.result as Partial<PageDetails> | undefined;
+      if (!details || typeof details !== "object") {
+        continue;
+      }
+      if (!selection && typeof details.selection === "string") {
+        selection = details.selection;
+      }
+      if (!description && typeof details.description === "string") {
+        description = details.description;
+      }
+    }
+    return { selection, description };
+  } catch (error) {
+    console.warn("Memos Clipper: failed to read the page details.", error);
+    return EMPTY_PAGE_DETAILS;
+  }
 }
 
 async function submitMemo(): Promise<void> {
@@ -371,18 +458,14 @@ async function submitMemo(): Promise<void> {
     return;
   }
 
-  const draft = elements.content.value.trim();
-  if (!draft) {
+  const content = elements.content.value.trim();
+  if (!content) {
     showStatus(t("popup.emptyMemo"), "error");
     elements.content.focus();
     return;
   }
 
-  const content = withDefaultTag(draft, config.defaultTag);
-  if (
-    composerState.lastMemoName &&
-    content === composerState.lastSavedContent
-  ) {
+  if (composerState.lastMemoName && content === composerState.lastSavedContent) {
     showStatus(t("popup.noChanges"), "info");
     return;
   }
@@ -394,7 +477,7 @@ async function submitMemo(): Promise<void> {
   try {
     const client = new MemosClient(config);
     if (!composerState.lastMemoName) {
-      const links = extractWebUrls(draft);
+      const links = extractWebUrls(content);
       if (links.length > 0) {
         const candidatePages = await Promise.all(
           links.map((link) => client.listMemosContaining(link)),
@@ -483,11 +566,7 @@ function hasUnsavedChanges(): boolean {
     return Boolean(composerState.draft.trim());
   }
 
-  const content = withDefaultTag(
-    composerState.draft.trim(),
-    config?.defaultTag ?? "",
-  );
-  return content !== composerState.lastSavedContent;
+  return composerState.draft.trim() !== composerState.lastSavedContent;
 }
 
 function updateCharacterCount(): void {

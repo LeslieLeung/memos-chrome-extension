@@ -6,6 +6,7 @@ import type {
   ComposerState,
   ExtensionConfig,
 } from "./lib/types";
+import { DEFAULT_CLIP_TEMPLATE } from "./lib/template";
 
 const CONFIG_KEY = "memos.config";
 const COMPOSER_STATE_KEY = "memos.composerState";
@@ -14,6 +15,7 @@ const DEFAULT_CONFIG: ExtensionConfig = {
   instanceUrl: "",
   apiKey: "",
   defaultTag: "#inbox",
+  clipTemplate: DEFAULT_CLIP_TEMPLATE,
   clipOnOpen: false,
   language: DEFAULT_LANGUAGE_PREFERENCE,
 };
@@ -39,6 +41,12 @@ function normalizeConfig(value: unknown): ExtensionConfig {
       typeof value.defaultTag === "string"
         ? value.defaultTag
         : DEFAULT_CONFIG.defaultTag,
+    // Configurations saved before clip templates did not include this field.
+    // Fall back to the default template rather than clipping an empty memo.
+    clipTemplate:
+      typeof value.clipTemplate === "string" && value.clipTemplate.trim()
+        ? value.clipTemplate
+        : DEFAULT_CONFIG.clipTemplate,
     // Older configurations did not offer automatic clipping. Preserve their
     // manual-composer behavior unless the user explicitly enables it.
     clipOnOpen:

@@ -4,8 +4,8 @@ import {
   buildClipContent,
   cleanTrackingUrl,
   extractWebUrls,
-  withDefaultTag,
 } from "../src/lib/content";
+import { DEFAULT_CLIP_TEMPLATE } from "../src/lib/template";
 
 describe("cleanTrackingUrl", () => {
   it("removes known trackers case-insensitively and preserves business data", () => {
@@ -64,58 +64,56 @@ describe("extractWebUrls", () => {
 });
 
 describe("buildClipContent", () => {
-  it("returns a plain cleaned URL", () => {
+  const page = {
+    title: "  A useful page  ",
+    url: "https://example.com/a_(b)?utm_source=test&id=7",
+    content: "Remember this",
+    description: "A practical guide.",
+    tag: "#inbox",
+  };
+
+  it("renders the default template into Markdown with the cleaned URL", () => {
+    expect(buildClipContent(page, DEFAULT_CLIP_TEMPLATE)).toBe(
+      "Remember this\n\n[A useful page](https://example.com/a_(b)?id=7)\n\n#inbox",
+    );
+  });
+
+  it("supports plain-URL templates for the legacy format", () => {
+    expect(buildClipContent(page, "{{url}}")).toBe(
+      "https://example.com/a_(b)?id=7",
+    );
+  });
+
+  it("omits missing selection, description, and tag", () => {
     expect(
-      buildClipContent({
-        title: "  A useful page  ",
-        url: "https://example.com/a_(b)?utm_source=test&id=7",
-      }),
+      buildClipContent(
+        { title: "Guide", url: "https://example.com/guide" },
+        DEFAULT_CLIP_TEMPLATE,
+      ),
+    ).toBe("[Guide](https://example.com/guide)");
+  });
+
+  it("normalizes the tag rendered for {{tag}}", () => {
+    expect(buildClipContent({ ...page, tag: "inbox" }, "{{url}} {{tag}}")).toBe(
+      "https://example.com/a_(b)?id=7 #inbox",
+    );
+    expect(
+      buildClipContent({ ...page, tag: "two words" }, "{{url}} {{tag}}"),
     ).toBe("https://example.com/a_(b)?id=7");
   });
 
-  it("does not include the page title or Markdown syntax", () => {
-    expect(
-      buildClipContent({
-        title: "A [guide]\nwith \\ examples",
-        url: "https://example.com/guide",
-      }),
-    ).toBe("https://example.com/guide");
+  it("leaves unknown placeholders untouched", () => {
+    expect(buildClipContent(page, "{{url}} by {{author}}")).toBe(
+      "https://example.com/a_(b)?id=7 by {{author}}",
+    );
   });
 
   it("rejects restricted pages", () => {
     expect(() =>
-      buildClipContent({ title: "Extensions", url: "chrome://extensions" }),
+      buildClipContent(
+        { title: "Extensions", url: "chrome://extensions" },
+        DEFAULT_CLIP_TEMPLATE,
+      ),
     ).toThrow(/Only http and https/);
-  });
-});
-
-describe("withDefaultTag", () => {
-  it("appends a normalized tag after the memo", () => {
-    expect(withDefaultTag("Remember this   ", "inbox")).toBe(
-      "Remember this\n\n#inbox",
-    );
-  });
-
-  it("returns just the tag for blank content", () => {
-    expect(withDefaultTag("  ", "#inbox")).toBe("#inbox");
-  });
-
-  it("does not append an exact tag that is already present", () => {
-    expect(withDefaultTag("Saved in #inbox.", "#inbox")).toBe(
-      "Saved in #inbox.",
-    );
-  });
-
-  it("does not confuse a prefix or nested tag with the exact default tag", () => {
-    expect(withDefaultTag("#inbox-later", "#inbox")).toBe(
-      "#inbox-later\n\n#inbox",
-    );
-    expect(withDefaultTag("#inbox/read", "#inbox")).toBe(
-      "#inbox/read\n\n#inbox",
-    );
-  });
-
-  it("leaves content unchanged when no tag is configured", () => {
-    expect(withDefaultTag("memo  ", "")).toBe("memo  ");
   });
 });
