@@ -42,8 +42,14 @@ jobs:
           manifest_version="$(node -p "require('./public/manifest.json').version")"
           expected_tag="v${package_version}"
 
-          test "${TAG_NAME}" = "${expected_tag}"
-          test "${package_version}" = "${manifest_version}"
+          if [[ "${TAG_NAME}" != "${expected_tag}" ]]; then
+            echo "::error::Release tag ${TAG_NAME} does not match package.json version ${package_version} (expected ${expected_tag}). Run npm run version:sync before tagging the release."
+            exit 1
+          fi
+          if [[ "${package_version}" != "${manifest_version}" ]]; then
+            echo "::error::Manifest version ${manifest_version} does not match package.json version ${package_version}. Run npm run version:sync and commit the version files before tagging the release."
+            exit 1
+          fi
 
       - name: Install dependencies
         run: npm ci

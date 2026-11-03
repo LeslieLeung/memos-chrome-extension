@@ -1,6 +1,6 @@
 {
   "name": "memos-chrome-extension",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "private": true,
   "type": "module",
   "description": "Create and clip Memos directly from Chrome and Firefox.",
