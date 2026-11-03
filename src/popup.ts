@@ -1,3 +1,4 @@
+import { getBrowserApi } from "./lib/browser";
 import "./popup.css";
 
 import {
@@ -369,7 +370,10 @@ const EMPTY_PAGE_DETAILS: PageDetails = { selection: "", description: "" };
 async function currentPageClipContent(
   options: { reuseInitialDetails?: boolean } = {},
 ): Promise<string> {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const [tab] = await getBrowserApi().tabs.query({
+    active: true,
+    currentWindow: true,
+  });
   if (!tab?.url || !/^https?:\/\//i.test(tab.url)) {
     throw new Error(t("popup.invalidPage"));
   }
@@ -404,7 +408,7 @@ interface PageDetails {
 }
 
 /**
- * Runs inside the clipped page. Must stay self-contained: chrome.scripting
+ * Runs inside the clipped page. Must stay self-contained: the scripting API
  * serializes the function, so it cannot close over popup state.
  */
 function collectPageDetails(): PageDetails {
@@ -422,12 +426,13 @@ function collectPageDetails(): PageDetails {
  * without the extras instead of failing the whole clip.
  */
 async function readPageDetails(tabId: number | undefined): Promise<PageDetails> {
-  if (typeof tabId !== "number" || tabId < 0 || !chrome.scripting?.executeScript) {
+  const api = getBrowserApi();
+  if (typeof tabId !== "number" || tabId < 0 || !api.scripting?.executeScript) {
     return EMPTY_PAGE_DETAILS;
   }
 
   try {
-    const injections = await chrome.scripting.executeScript({
+    const injections = await api.scripting.executeScript({
       target: { tabId, allFrames: true },
       func: collectPageDetails,
     });
@@ -591,7 +596,7 @@ function hideStatus(): void {
 }
 
 function openSettings(): void {
-  void chrome.runtime.openOptionsPage();
+  void getBrowserApi().runtime.openOptionsPage();
 }
 
 function readableError(error: unknown): string {
@@ -610,7 +615,7 @@ function emptyComposerState(): ComposerState {
 
 async function getCurrentTabId(): Promise<number | undefined> {
   try {
-    const [tab] = await chrome.tabs.query({
+    const [tab] = await getBrowserApi().tabs.query({
       active: true,
       currentWindow: true,
     });

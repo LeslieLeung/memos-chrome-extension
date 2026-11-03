@@ -1,3 +1,4 @@
+import { getBrowserApi } from "./lib/browser";
 import "./options.css";
 
 import {
@@ -69,7 +70,10 @@ export function normalizeInstanceUrl(rawValue: string): string {
 }
 
 export function originPermission(instanceUrl: string): string {
-  return getOriginPattern(instanceUrl);
+  return getOriginPattern(
+    instanceUrl,
+    import.meta.env.MODE === "firefox" ? "firefox" : "chrome",
+  );
 }
 
 function normalizeDefaultTag(rawValue: string): string {
@@ -448,7 +452,7 @@ async function handleSubmit(event: SubmitEvent): Promise<void> {
   try {
     // This is deliberately the first awaited browser call in the submit handler:
     // optional permissions must be requested while the user gesture is active.
-    const granted = await chrome.permissions.request({
+    const granted = await getBrowserApi().permissions.request({
       origins: [nextPermission],
     });
     if (!granted) {
@@ -463,7 +467,7 @@ async function handleSubmit(event: SubmitEvent): Promise<void> {
 
     if (previousPermission && previousPermission !== nextPermission) {
       try {
-        await chrome.permissions.remove({ origins: [previousPermission] });
+        await getBrowserApi().permissions.remove({ origins: [previousPermission] });
       } catch (error) {
         console.warn("Failed to remove the previous host permission", error);
         setStatus(t("options.savedOldPermission"), "warning");

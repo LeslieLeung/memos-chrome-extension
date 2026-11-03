@@ -1,3 +1,4 @@
+import { getBrowserApi } from "./lib/browser";
 import {
   DEFAULT_LANGUAGE_PREFERENCE,
   isLanguagePreference,
@@ -93,12 +94,12 @@ function composerStateKey(tabId?: number): string {
 }
 
 export async function loadConfig(): Promise<ExtensionConfig> {
-  const result = await chrome.storage.local.get(CONFIG_KEY);
+  const result = await getBrowserApi().storage.local.get(CONFIG_KEY);
   return normalizeConfig(result[CONFIG_KEY]);
 }
 
 export async function saveConfig(config: ExtensionConfig): Promise<void> {
-  await chrome.storage.local.set({
+  await getBrowserApi().storage.local.set({
     [CONFIG_KEY]: normalizeConfig(config),
   });
 }
@@ -107,7 +108,7 @@ export async function loadComposerState(
   tabId?: number,
 ): Promise<ComposerState | null> {
   const key = composerStateKey(tabId);
-  const result = await chrome.storage.session.get(key);
+  const result = await getBrowserApi().storage.session.get(key);
   return normalizeComposerState(result[key]);
 }
 
@@ -120,11 +121,11 @@ export async function saveComposerState(
     throw new TypeError("Invalid composer state");
   }
 
-  await chrome.storage.session.set({
+  await getBrowserApi().storage.session.set({
     [composerStateKey(tabId)]: normalized,
   });
 }
 
 export async function clearComposerState(tabId?: number): Promise<void> {
-  await chrome.storage.session.remove(composerStateKey(tabId));
+  await getBrowserApi().storage.session.remove(composerStateKey(tabId));
 }

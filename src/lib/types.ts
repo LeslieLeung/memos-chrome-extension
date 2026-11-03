@@ -3,7 +3,7 @@ export const SUPPORTED_LOCALES = ["zh-CN", "en"] as const;
 export type SupportedLocale = (typeof SUPPORTED_LOCALES)[number];
 
 /**
- * "system" follows Chrome's UI language when available, then the browser
+ * "system" follows the browser's UI language when available, then the browser
  * language. The explicit values are deliberately limited to the two locales
  * supported by the extension.
  */

@@ -84,6 +84,15 @@ describe("buildClipContent", () => {
     );
   });
 
+  it("clips HTTP pages with explicit ports", () => {
+    expect(buildClipContent({
+      title: "Local guide",
+      url: "http://localhost:5230/guide?utm_source=test&id=7",
+    }, DEFAULT_CLIP_TEMPLATE)).toBe(
+      "[Local guide](http://localhost:5230/guide?id=7)",
+    );
+  });
+
   it("omits missing selection, description, and tag", () => {
     expect(
       buildClipContent(

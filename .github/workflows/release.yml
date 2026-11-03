@@ -12,6 +12,7 @@ jobs:
   release:
     name: Build and publish
     runs-on: ubuntu-latest
+    timeout-minutes: 50
 
     steps:
       - name: Check out source
@@ -20,8 +21,18 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
+
+      - name: Verify Mozilla signing credentials
+        env:
+          WEB_EXT_API_KEY: ${{ secrets.AMO_API_KEY }}
+          WEB_EXT_API_SECRET: ${{ secrets.AMO_API_SECRET }}
+        run: |
+          if [[ -z "${WEB_EXT_API_KEY}" || -z "${WEB_EXT_API_SECRET}" ]]; then
+            echo "::error::Configure the AMO_API_KEY and AMO_API_SECRET repository secrets before releasing."
+            exit 1
+          fi
 
       - name: Verify the release version
         env:
@@ -44,19 +55,66 @@ jobs:
           npm test
           npm run build
           npm run validate:dist
+          npm run build:firefox
+          npm run validate:firefox
+          npx --yes web-ext@10.8.0 lint --source-dir dist-firefox
 
-      - name: Create release archive
+      - name: Create release archives and reviewer source bundle
         env:
           VERSION: ${{ github.ref_name }}
         run: |
           cd dist
           zip -r "../memos-chrome-extension-${VERSION}.zip" .
+          cd ../dist-firefox
+          zip -r "../memos-firefox-extension-${VERSION}.zip" .
+          cd ..
+          git archive --format=zip --output="${RUNNER_TEMP}/memos-firefox-source.zip" HEAD
+
+      - name: Sign Firefox extension with Mozilla
+        timeout-minutes: 35
+        env:
+          WEB_EXT_API_KEY: ${{ secrets.AMO_API_KEY }}
+          WEB_EXT_API_SECRET: ${{ secrets.AMO_API_SECRET }}
+        run: |
+          npx --yes web-ext@10.8.0 sign \
+            --channel unlisted \
+            --source-dir dist-firefox \
+            --artifacts-dir "${RUNNER_TEMP}/firefox-signed" \
+            --upload-source-code "${RUNNER_TEMP}/memos-firefox-source.zip" \
+            --approval-timeout 1800000 \
+            --no-input
+
+      - name: Prepare signed Firefox release asset
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          shopt -s nullglob
+          signed_packages=("${RUNNER_TEMP}"/firefox-signed/*.xpi)
+          if [[ ${#signed_packages[@]} -ne 1 ]]; then
+            echo "::error::Expected exactly one Mozilla-signed XPI. Check the AMO submission status before retrying."
+            exit 1
+          fi
+          unzip -t "${signed_packages[0]}"
+          cp -- "${signed_packages[0]}" "memos-firefox-extension-${VERSION}.xpi"
+
+      - name: Save release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: extensions-${{ github.ref_name }}
+          path: |
+            memos-chrome-extension-${{ github.ref_name }}.zip
+            memos-firefox-extension-${{ github.ref_name }}.zip
+            memos-firefox-extension-${{ github.ref_name }}.xpi
+          if-no-files-found: error
 
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG_NAME: ${{ github.ref_name }}
         run: |
-          gh release create "${TAG_NAME}" "memos-chrome-extension-${TAG_NAME}.zip" \
+          gh release create "${TAG_NAME}" \
+            "memos-chrome-extension-${TAG_NAME}.zip" \
+            "memos-firefox-extension-${TAG_NAME}.zip" \
+            "memos-firefox-extension-${TAG_NAME}.xpi" \
             --title "${TAG_NAME}" \
             --generate-notes

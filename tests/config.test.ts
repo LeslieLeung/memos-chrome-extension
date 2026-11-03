@@ -44,6 +44,18 @@ describe("instance URL derivations", () => {
       "http://localhost:5230/*",
     );
   });
+
+  it("omits ports in Firefox permissions while retaining them in API URLs", () => {
+    expect(getOriginPattern("http://localhost:5230/apps/memos", "firefox")).toBe(
+      "http://localhost/*",
+    );
+    expect(getOriginPattern("http://[::1]:5230/apps/memos", "firefox")).toBe(
+      "http://[::1]/*",
+    );
+    expect(buildApiBaseUrl("http://localhost:5230/apps/memos")).toBe(
+      "http://localhost:5230/apps/memos/api/v1",
+    );
+  });
 });
 
 describe("normalizeDefaultTag", () => {

@@ -1,16 +1,40 @@
 import { access, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
-const distDirectory = resolve("dist");
+const target = process.argv[2] ?? "chrome";
+if (!["chrome", "firefox"].includes(target)) {
+  throw new Error(`Unknown browser target: ${target}`);
+}
+const distDirectory = resolve(target === "firefox" ? "dist-firefox" : "dist");
 const manifestPath = resolve(distDirectory, "manifest.json");
 const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
 
 if (manifest.manifest_version !== 3) {
-  throw new Error("dist/manifest.json is not Manifest V3.");
+  throw new Error(`${manifestPath} is not Manifest V3.`);
+}
+
+const background = manifest.background;
+if (background?.type !== "module") {
+  throw new Error("Background entry point must be an ES module.");
+}
+if (target === "firefox") {
+  const gecko = manifest.browser_specific_settings?.gecko;
+  if (
+    !Array.isArray(background.scripts) || background.scripts.length === 0 ||
+    background.service_worker || manifest.minimum_chrome_version ||
+    !gecko?.id || gecko.strict_min_version !== "140.0" ||
+    !["authenticationInfo", "browsingActivity", "websiteContent"].every(
+      (type) => gecko.data_collection_permissions?.required?.includes(type),
+    )
+  ) {
+    throw new Error("Invalid Firefox background or browser-specific settings.");
+  }
+} else if (!background.service_worker || background.scripts || manifest.browser_specific_settings) {
+  throw new Error("Invalid Chrome service worker manifest.");
 }
 
 const referencedFiles = new Set([
-  manifest.background?.service_worker,
+  ...(target === "firefox" ? background.scripts : [background.service_worker]),
   manifest.action?.default_popup,
   manifest.options_page,
   ...Object.values(manifest.icons ?? {}),
@@ -51,4 +75,4 @@ for (const locale of ["en", "zh_CN"]) {
   }
 }
 
-console.log(`Validated ${referencedFiles.size} Manifest file references.`);
+console.log(`Validated ${target}: ${referencedFiles.size} Manifest file references.`);

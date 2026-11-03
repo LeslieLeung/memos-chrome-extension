@@ -81,7 +81,7 @@ export function buildClipContent(data: ClipData, template: string): string {
   } catch {
     throw new TypeError("The current page does not have a valid web URL.");
   }
-  if (parsed.protocol !== "http" && parsed.protocol !== "https:") {
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
     throw new TypeError("Only http and https pages can be clipped.");
   }
 

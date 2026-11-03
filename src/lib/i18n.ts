@@ -1,3 +1,4 @@
+import { getBrowserApi } from "./browser";
 import {
   DEFAULT_LANGUAGE_PREFERENCE,
   SUPPORTED_LOCALES,
@@ -57,7 +58,7 @@ const en = {
   "options.accessToken": "Access Token",
   "options.accessTokenPlaceholder": "Paste your Memos Access Token",
   "options.accessTokenHint":
-    "The token is stored only in chrome.storage.local and is never logged.",
+    "The token is stored only in local extension storage and is never logged.",
   "options.defaultTag": "Default tag",
   "options.optional": "Optional",
   "options.defaultTagHint":
@@ -79,7 +80,7 @@ const en = {
     "A practical guide to keeping useful ideas close.",
   "options.language": "Language",
   "options.languageHint":
-    "System follows Chrome's language. Your choice applies to this extension only.",
+    "System follows your browser's language. Your choice applies to this extension only.",
   "options.languageSystem": "System default",
   "options.languageChinese": "中文",
   "options.languageEnglish": "English",
@@ -165,7 +166,7 @@ const zhCN: Record<TranslationKey, string> = {
   "options.accessToken": "Access Token",
   "options.accessTokenPlaceholder": "粘贴 Memos Access Token",
   "options.accessTokenHint":
-    "Token 仅存入 chrome.storage.local，不会写入日志。",
+    "Token 仅存入本地扩展存储，不会写入日志。",
   "options.defaultTag": "默认标签",
   "options.optional": "可选",
   "options.defaultTagHint": "剪藏时替换剪藏模板中的 {{tag}} 变量。",
@@ -182,7 +183,7 @@ const zhCN: Record<TranslationKey, string> = {
   "options.templateSampleTitle": "设计一份个人档案",
   "options.templateSampleDescription": "一份让有用想法触手可及的实用指南。",
   "options.language": "语言",
-  "options.languageHint": "系统默认跟随 Chrome 语言；你的选择只应用于此扩展。",
+  "options.languageHint": "系统默认跟随浏览器语言；你的选择只应用于此扩展。",
   "options.languageSystem": "跟随系统",
   "options.languageChinese": "中文",
   "options.languageEnglish": "English",
@@ -223,17 +224,15 @@ let currentLocale: SupportedLocale = resolveLocale(DEFAULT_LANGUAGE_PREFERENCE);
 
 function getSystemLanguages(): readonly string[] {
   try {
-    if (
-      typeof chrome !== "undefined" &&
-      typeof chrome.i18n?.getUILanguage === "function"
-    ) {
-      const chromeLanguage = chrome.i18n.getUILanguage();
-      if (chromeLanguage) {
-        return [chromeLanguage];
+    const api = getBrowserApi();
+    if (typeof api.i18n?.getUILanguage === "function") {
+      const browserLanguage = api.i18n.getUILanguage();
+      if (browserLanguage) {
+        return [browserLanguage];
       }
     }
   } catch {
-    // `chrome.i18n` is unavailable in unit tests and non-extension contexts.
+    // The extension i18n API is unavailable in unit tests and non-extension contexts.
   }
 
   if (typeof navigator === "undefined") {

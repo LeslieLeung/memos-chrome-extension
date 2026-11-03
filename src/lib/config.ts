@@ -47,10 +47,18 @@ export function buildApiBaseUrl(instanceUrl: string): string {
   return `${normalizeInstanceUrl(instanceUrl)}/api/v1`;
 }
 
-/** Returns the concrete Chrome host-permission match pattern for this instance. */
-export function getOriginPattern(instanceUrl: string): string {
-  const origin = new URL(normalizeInstanceUrl(instanceUrl)).origin;
-  return `${origin}/*`;
+/** Returns the concrete browser host-permission match pattern for this instance. */
+export function getOriginPattern(
+  instanceUrl: string,
+  browser: "chrome" | "firefox" = "chrome",
+): string {
+  const url = new URL(normalizeInstanceUrl(instanceUrl));
+  // Firefox match patterns do not support ports. This only changes the
+  // permission pattern; the configured API URL retains its explicit port.
+  if (browser === "firefox") {
+    url.port = "";
+  }
+  return `${url.origin}/*`;
 }
 
 /**
